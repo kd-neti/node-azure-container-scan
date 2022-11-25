@@ -32,6 +32,7 @@ jobs:
           docker build -f ./Dockerfile -t ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
       
       - name: Scan image
+        id: scan
         uses: Azure/container-scan@v0
         with:
           image-name: ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
