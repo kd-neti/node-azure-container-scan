@@ -1,0 +1,57 @@
+name: azure-container-scan
+
+on:
+  workflow_call:
+
+env:
+  NODE_VERSION: '16.x'                # set this to the node version to use
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      
+      - name: Login to the Container Registry  
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      
+      - name: Build and Tag image
+        run: |
+          docker build -f ./Dockerfile -t ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+      
+      - name: Scan image
+        uses: Azure/container-scan@v0
+        with:
+          image-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          severity-threshold: CRITICAL
+          run-quality-checks: true
+
+      - name: Convert Container Scan Report to SARIF
+        id: scan-to-sarif
+        uses: rm3l/container-scan-to-sarif-action@v1
+        if: ${{ always() }}
+        with:
+          input-file: ${{ steps.scan.outputs.scan-report-path }}
+
+      - name: Upload SARIF reports to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v1
+        if: ${{ always() }}
+        with:
+          sarif_file: ${{ steps.scan-to-sarif.outputs.sarif-report-path }}
+      
+      - name: Push image
+        run: |
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
